@@ -6,8 +6,8 @@
   </head>
   <body>
       <!-- <video id="webcam" autoplay style="width: 100vw; height: 100vh;"></video> -->
-      <div style="position: relative; width: 100vw; height: 100vh; transform: scaleX(-1);" id="root">
-        <video id="webcam" autoplay style="width: 100%;"></video>
+      <div style="position: relative; width: 100vw; transform: scaleX(1);" id="root">
+        <video style="width:100%; aspect-ratio: 16/9;" id="webcam" src="/Testvid.mp4" autoplay muted loop></video>
         <canvas style="position: absolute; top: 0px; left: 0px; width:100%" width="1920" height="1080"></canvas>
       </div>
     <script type="module" src="/src/main.ts"></script>
