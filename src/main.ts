@@ -1,20 +1,23 @@
 import './style.css';
 import { matterSetup, makePlayer } from './matterSetup';
-import * as faceapi from 'face-api.js';
+// import * as faceapi from 'face-api.js';
 import Matter from 'matter-js';
 import { Player } from './Types';
 
-var errorCallback = function (e) {
-  console.log('Reeeejected!', e);
-};
+import '@mediapipe/face_mesh';
+import '@tensorflow/tfjs-core';
+import '@tensorflow/tfjs-backend-webgl';
+import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
+
 
 var video = document.querySelector('video');
 
 //Enable webcam
   if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({video: {
+    await navigator.mediaDevices.getUserMedia({video: {
       width: { ideal: 1920  },
-      height: { ideal: 1080 } 
+      height: { ideal: 1080 }, 
+       frameRate: {ideal: 60},
   }  }).then(function(stream) {
         //video.src = window.URL.createObjectURL(stream);
         video.srcObject = stream;
@@ -22,9 +25,14 @@ var video = document.querySelector('video');
     });
 }
 
-// await faceapi.loadSsdMobilenetv1Model('/models')
-await faceapi.loadTinyFaceDetectorModel('/models')
-await faceapi.loadFaceLandmarkTinyModel('/models')
+const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+const detectorConfig = {
+  runtime: 'mediapipe', // or 'tfjs'
+  solutionPath: "../node_modules/@mediapipe/face_mesh",
+  maxFaces: 4,
+}
+const detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+
 
 const canvas = document.querySelector('canvas')
 const input = document.getElementById('webcam')
@@ -93,15 +101,19 @@ let positionBufferIndex = 0;
 var ctx = canvas.getContext('2d');
 
 const render = async () => {
-  detections = await faceapi
-    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks(true);
+  const estimationConfig = {
+    flipHorizontal: false,
+  };
+  const detections = await detector.estimateFaces(video, estimationConfig);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    if(!gameStarted){
-      const detectionsForSize = faceapi.resizeResults(detections, { width: 1920, height: 1080 })
-      faceapi.draw.drawFaceLandmarks(canvas, detectionsForSize, { drawLines: false })
-    }
+  // const detectionsForSize = faceapi.resizeResults(detections, { width: input.offsetWidth, height: input.offsetHeight })
+  var ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // console.log(detections);
+
+  drawResults(ctx, detections, false, true);
 
   if (!gameStarted) {
     playerCount = detections.length;
@@ -113,7 +125,7 @@ const render = async () => {
   for (var i = 0; i < detections.length; i++) {
     if(!gameStarted) continue;
     let face = detections[i];
-    var pos = face.landmarks.positions[30];
+    var pos = face.keypoints[4];
     var closestPlayer = 0;
     var closestDistance = 100000000;
     for (var j = 0; j < players.length; j++) {
@@ -133,21 +145,9 @@ const render = async () => {
 
     let face = PlayerDetections[i];
 
-    if(!face) continue;
-
-    //Get distance between eye left = 39 right = 42
-    var left = face.landmarks.positions[39];
-    var right = face.landmarks.positions[42];
-    var distance = Math.sqrt(Math.pow(left.x - right.x, 2) + Math.pow(left.y - right.y, 2));
-
-    //Get change scale of nose based on eye distance
-    // let maxDist = 100;
-    // var noseScale = distance / maxDist;
-    // noseScale = Math.max(0, Math.min(noseScale, 1));
-
-    var pos = face.landmarks.positions[30];
-    //players[i].constraint.pointA = { x: pos.x, y: pos.y };
-    //players[i].lastPosition = pos;
+    var pos = face.keypoints[4];
+    players[i].constraint.pointA = { x: pos.x, y: pos.y };
+    players[i].lastPosition = pos;
 
     //Add to buffer
     players[i].posBuffer[positionBufferIndex] = pos;
@@ -237,6 +237,54 @@ const startGameFreeze = () => {
   requestAnimationFrame(startGameFreeze);
 }
 startGameFreeze();
+
+function drawResults(ctx: CanvasRenderingContext2D | null, faces: any[], boundingBox: boolean, showKeypoints: boolean) {
+  faces.forEach((face) => {
+    const keypoints =
+        face.keypoints.map((keypoint) => [keypoint.x, keypoint.y]);
+
+    if (boundingBox) {
+      ctx.strokeStyle = 'Red';
+      ctx.lineWidth = 1;
+
+      const box = face.box;
+      drawPath(
+          ctx,
+          [
+            [box.xMin, box.yMin], [box.xMax, box.yMin], [box.xMax, box.yMax],
+            [box.xMin, box.yMax]
+          ],
+          true);
+    }
+
+    if (showKeypoints) {
+      ctx.fillStyle = 'Green';
+
+      for (let i = 0; i < 468; i++) {
+        const x = keypoints[i][0];
+        const y = keypoints[i][1];
+
+        ctx.beginPath();
+        ctx.arc(x, y, 3 /* radius */, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  });
+}
+
+function drawPath(ctx, points, closePath) {
+  const region = new Path2D();
+  region.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i];
+    region.lineTo(point[0], point[1]);
+  }
+
+  if (closePath) {
+    region.closePath();
+  }
+  ctx.stroke(region);
+}
 
 setInterval(render, 1000 / 60);
 
