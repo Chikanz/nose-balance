@@ -3,6 +3,8 @@ export interface Player {
     constraint: Matter.Constraint;
     lastPosition: Position;
     alive: boolean;
+    color: string;
+    posBuffer: Position[];
 }
 
 export interface Position {

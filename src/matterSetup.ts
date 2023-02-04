@@ -42,9 +42,9 @@ export function matterSetup(root) {
 }
 
 
-let stickHeight = 300;
+let stickHeight = 500;
 
-export function makePlayer(){
+export function makePlayer(pos: {x: number, y: number}){
 
   if(!engine) return;
 
@@ -52,7 +52,7 @@ export function makePlayer(){
   const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
   const color = colors[Math.floor(Math.random() * colors.length)];
 
-  var box = Bodies.rectangle(400, 200, 20, stickHeight, {
+  var box = Bodies.rectangle(pos.x, pos.y, 20, stickHeight, {
     frictionAir: 0.05 ,
     render: {
       fillStyle: color,
@@ -62,7 +62,7 @@ export function makePlayer(){
   });
 
   var constraint = Constraint.create({
-    pointA: { x: 400, y: box.position.y + stickHeight/2},
+    pointA: { x: pos.x, y: box.position.y + stickHeight/2},
     bodyB: box,
     pointB: { x: 0, y: stickHeight/2 },
     stiffness: 1,
@@ -71,5 +71,5 @@ export function makePlayer(){
   // add all of the bodies to the world
   Composite.add(engine.world, [box, constraint]);
 
-  return {box, constraint, lastPosition: {x: 0, y: 0}, alive: true};
+  return {box, constraint, lastPosition: {x: 0, y: 0}, alive: true, color, posBuffer: [pos]};
 }
