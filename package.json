@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite --host --port 3000",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host --port 3000"
   },
   "devDependencies": {
     "@types/matter-js": "^0.18.2",

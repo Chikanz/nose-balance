@@ -1,16 +1,22 @@
 import './style.css';
 import { matterSetup, makePlayer } from './matterSetup';
-// import * as faceapi from 'face-api.js';
 import Matter from 'matter-js';
 import { Player } from './Types';
 
-import '@mediapipe/face_mesh';
-import '@tensorflow/tfjs-core';
-import '@tensorflow/tfjs-backend-webgl';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
+// import '@mediapipe/face_mesh';
+// import '@tensorflow/tfjs-core';
+// import '@tensorflow/tfjs-backend-webgl';
+// import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
+// import { Face } from '@tensorflow-models/face-landmarks-detection';
 
 
 var video = document.querySelector('video');
+
+let detector;
+
+function sleep(ms : number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 //Enable webcam
   if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -18,29 +24,32 @@ var video = document.querySelector('video');
       width: { ideal: 1920  },
       height: { ideal: 1080 }, 
        frameRate: {ideal: 60},
-  }  }).then(function(stream) {
+  }  }).then(async function(stream) {
         //video.src = window.URL.createObjectURL(stream);
         video.srcObject = stream;
         video.play();
+
+        await sleep(2000);
+
+        const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+        const detectorConfig = {
+          runtime: 'mediapipe', // or 'tfjs'
+          // solutionPath: "../node_modules/@mediapipe/face_mesh",
+          solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
+          modelType: 'full',
+          maxFaces: 3,
+          refineLandmarks: false,
+        }
+        detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+        console.log("Loaded");
     });
 }
 
-const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-const detectorConfig = {
-  runtime: 'mediapipe', // or 'tfjs'
-  solutionPath: "../node_modules/@mediapipe/face_mesh",
-  maxFaces: 4,
-}
-const detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
-
 
 const canvas = document.querySelector('canvas')
-const input = document.getElementById('webcam')
 const textDisplay = document.querySelector('h1');
 
 var physics = matterSetup(document.querySelector('#root'));
-
-console.log("Loaded");
 
 let gameStarted = false; //Time between enter and game start
 let gameRunning = false;
@@ -51,7 +60,7 @@ let countdownTimer = 4;
 let playerCount = 0;
 let players: Player[] = [];
 
-let detections;
+let detections : Face[];
 
 //Start game on enter pressed 
 document.addEventListener('keydown', async function (event) {
@@ -64,7 +73,7 @@ document.addEventListener('keydown', async function (event) {
     
     for (var i = 0; i < playerCount; i++) {
 
-      var pos = detections[i].landmarks.positions[30];
+      var pos = detections[i].keypoints[4];
 
       var player = makePlayer(pos);
       
@@ -104,7 +113,7 @@ const render = async () => {
   const estimationConfig = {
     flipHorizontal: false,
   };
-  const detections = await detector.estimateFaces(video, estimationConfig);
+  detections = await detector.estimateFaces(video, estimationConfig);
 
   // const detectionsForSize = faceapi.resizeResults(detections, { width: input.offsetWidth, height: input.offsetHeight })
   var ctx = canvas.getContext('2d');
@@ -113,7 +122,7 @@ const render = async () => {
 
   // console.log(detections);
 
-  drawResults(ctx, detections, false, true);
+  if(!gameStarted) drawResults(ctx, detections, false, true);
 
   if (!gameStarted) {
     playerCount = detections.length;
@@ -198,11 +207,11 @@ const render = async () => {
   //Draw Crosses over eyes of dead players
   for (var i = 0; i < players.length; i++) {
     if(!players[i].alive){
-      var left = PlayerDetections[i].landmarks.positions[39 + 1];
-      var right = PlayerDetections[i].landmarks.positions[42 + 5];
+      var left = PlayerDetections[i].keypoints[145];
+      var right = PlayerDetections[i].keypoints[374];
       
-      drawX(left.x, left.y);
-      drawX(right.x, right.y);
+      drawX(left.x, left.y - 10);
+      drawX(right.x, right.y - 10);
 
 
     }

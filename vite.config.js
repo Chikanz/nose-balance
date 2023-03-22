@@ -7,5 +7,8 @@ export default defineConfig({
   server: {
     https: true
   },
+  // build: {
+  //   minify: false,
+  // },
   plugins: [mkcert(), topLevelAwait()]
 })
