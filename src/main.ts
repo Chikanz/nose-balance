@@ -14,35 +14,50 @@ var video = document.querySelector('video');
 
 let detector;
 
-function sleep(ms : number) {
+function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 //Enable webcam
-  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    await navigator.mediaDevices.getUserMedia({video: {
-      width: { ideal: 1920  },
-      height: { ideal: 1080 }, 
-       frameRate: {ideal: 60},
-  }  }).then(async function(stream) {
-        //video.src = window.URL.createObjectURL(stream);
-        video.srcObject = stream;
-        video.play();
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 60 },
+    }
+  }).then(async function (stream) {
+    //video.src = window.URL.createObjectURL(stream);
+    video.srcObject = stream;
+    video.play();
 
-        await sleep(2000);
+    await sleep(2000);
 
-        const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-        const detectorConfig = {
-          runtime: 'mediapipe', // or 'tfjs'
-          // solutionPath: "../node_modules/@mediapipe/face_mesh",
-          solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
-          modelType: 'full',
-          maxFaces: 3,
-          refineLandmarks: false,
-        }
-        detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
-        console.log("Loaded");
+    // const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+    // const detectorConfig = {
+    //   runtime: 'mediapipe', // or 'tfjs'
+    //   // solutionPath: "../node_modules/@mediapipe/face_mesh",
+    //   solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
+    //   modelType: 'full',
+    //   maxFaces: 3,
+    //   refineLandmarks: false,
+    // }
+    // detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+
+    const faceDetection = new window.FaceDetection({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`;
+      }
     });
+    faceDetection.onResults(render);
+    await faceDetection.setOptions({
+      model: 'full',
+      // selfieMode: true,
+      minDetectionConfidence: 0.5,
+    });
+
+    console.log("Loaded");
+  });
 }
 
 
@@ -60,26 +75,26 @@ let countdownTimer = 4;
 let playerCount = 0;
 let players: Player[] = [];
 
-let detections : Face[];
+let detections: Face[];
 
 //Start game on enter pressed 
 document.addEventListener('keydown', async function (event) {
   if (event.key == 'Enter') {
 
-    if(gameStarted || gameRunning) return;
+    if (gameStarted || gameRunning) return;
 
     gameStarted = true;
     console.log("Player count: " + playerCount);
-    
+
     for (var i = 0; i < playerCount; i++) {
 
       var pos = detections[i].keypoints[4];
 
       var player = makePlayer(pos);
-      
+
       player.constraint.pointA = { x: pos.x, y: pos.y };
       player.lastPosition = pos;
-      
+
       players.push(player);
     }
 
@@ -87,13 +102,13 @@ document.addEventListener('keydown', async function (event) {
       countdownTimer -= 1;
       textDisplay.innerHTML = `${countdownTimer}`
 
-      if(countdownTimer == 0){
+      if (countdownTimer == 0) {
         gameRunning = true;
         textDisplay.innerHTML = `Go!`
 
-        setTimeout(() => {textDisplay.innerHTML = ``}, 1000);
+        setTimeout(() => { textDisplay.innerHTML = `` }, 1000);
       }
-      else{
+      else {
         setTimeout(countDown, 1000);
       }
     }
@@ -109,30 +124,38 @@ let positionBufferIndex = 0;
 
 var ctx = canvas.getContext('2d');
 
-const render = async () => {
+const render = async (results) => {
   const estimationConfig = {
     flipHorizontal: false,
   };
-  detections = await detector.estimateFaces(video, estimationConfig);
+  // detections = await detector.estimateFaces(video, estimationConfig);
 
-  // const detectionsForSize = faceapi.resizeResults(detections, { width: input.offsetWidth, height: input.offsetHeight })
   var ctx = canvas.getContext('2d');
+  if(ctx == null || canvas == null) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
   // console.log(detections);
 
-  if(!gameStarted) drawResults(ctx, detections, false, true);
+  if (!gameStarted) {
+    window.drawRectangle(
+      ctx, results.detections[0].boundingBox,
+      { color: 'blue', lineWidth: 4, fillColor: '#00000000' });
+    window.drawLandmarks(ctx, results.detections[0].landmarks, {
+      color: 'red',
+      radius: 5,
+    });
+  }
 
   if (!gameStarted) {
     playerCount = detections.length;
-    textDisplay.innerHTML = `Detected ${detections.length} players. <br/> Press enter to start!`
+    textDisplay.innerHTML = `Detected ${results.detections.length} players. <br/> Press enter to start!`
   }
 
   let PlayerDetections = [];
   //Detections can be in any order, so compare the current position to the last to determine which player it is
   for (var i = 0; i < detections.length; i++) {
-    if(!gameStarted) continue;
+    if (!gameStarted) continue;
     let face = detections[i];
     var pos = face.keypoints[4];
     var closestPlayer = 0;
@@ -150,7 +173,7 @@ const render = async () => {
 
   //Face update
   for (var i = 0; i < PlayerDetections.length; i++) {
-    if(!gameStarted) continue;
+    if (!gameStarted) continue;
 
     let face = PlayerDetections[i];
 
@@ -162,21 +185,20 @@ const render = async () => {
     players[i].posBuffer[positionBufferIndex] = pos;
 
     //Average buffer
-    var avgPos = {x: 0, y: 0};
+    var avgPos = { x: 0, y: 0 };
     let len = Math.min(posBufferSize, players[i].posBuffer.length);
-    for(var j = 0; j < len; j++)
-    {
+    for (var j = 0; j < len; j++) {
       avgPos.x += players[i].posBuffer[j].x;
       avgPos.y += players[i].posBuffer[j].y;
     }
 
-    let newPos = {x: avgPos.x / len, y: avgPos.y / len};
+    let newPos = { x: avgPos.x / len, y: avgPos.y / len };
 
     players[i].lastPosition = newPos;
     players[i].constraint.pointA = newPos;
   }
 
-  if(gameStarted) positionBufferIndex = (positionBufferIndex + 1) % posBufferSize;
+  if (gameStarted) positionBufferIndex = (positionBufferIndex + 1) % posBufferSize;
 
   //Alive check
   if (gameRunning) {
@@ -198,7 +220,7 @@ const render = async () => {
         winner = i;
       }
     }
-    if(aliveCount == 1){
+    if (aliveCount == 1) {
       textDisplay.innerHTML = `${players[winner].color} wins!`
     }
   }
@@ -206,10 +228,10 @@ const render = async () => {
 
   //Draw Crosses over eyes of dead players
   for (var i = 0; i < players.length; i++) {
-    if(!players[i].alive){
+    if (!players[i].alive) {
       var left = PlayerDetections[i].keypoints[145];
       var right = PlayerDetections[i].keypoints[374];
-      
+
       drawX(left.x, left.y - 10);
       drawX(right.x, right.y - 10);
 
@@ -236,7 +258,7 @@ function drawX(x, y) {
 //Stop bodies moving before starting
 const startGameFreeze = () => {
   //Game start stop moving
-  if(!gameRunning){
+  if (!gameRunning) {
     Matter.Composite.allBodies(physics.engine.world).forEach(function (body) {
       Matter.Body.setAngle(body, 0);
       Matter.Body.setAngularVelocity(body, 0);
@@ -250,7 +272,7 @@ startGameFreeze();
 function drawResults(ctx: CanvasRenderingContext2D | null, faces: any[], boundingBox: boolean, showKeypoints: boolean) {
   faces.forEach((face) => {
     const keypoints =
-        face.keypoints.map((keypoint) => [keypoint.x, keypoint.y]);
+      face.keypoints.map((keypoint) => [keypoint.x, keypoint.y]);
 
     if (boundingBox) {
       ctx.strokeStyle = 'Red';
@@ -258,12 +280,12 @@ function drawResults(ctx: CanvasRenderingContext2D | null, faces: any[], boundin
 
       const box = face.box;
       drawPath(
-          ctx,
-          [
-            [box.xMin, box.yMin], [box.xMax, box.yMin], [box.xMax, box.yMax],
-            [box.xMin, box.yMax]
-          ],
-          true);
+        ctx,
+        [
+          [box.xMin, box.yMin], [box.xMax, box.yMin], [box.xMax, box.yMax],
+          [box.xMin, box.yMax]
+        ],
+        true);
     }
 
     if (showKeypoints) {
@@ -295,5 +317,5 @@ function drawPath(ctx, points, closePath) {
   ctx.stroke(region);
 }
 
-setInterval(render, 1000 / 60);
+// setInterval(render, 1000 / 60);
 
