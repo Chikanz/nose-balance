@@ -53,6 +53,9 @@ document.addEventListener('keydown', async function (event) {
 
       var pos = detections[i].landmarks[2];
 
+      pos.x *= 1920;
+      pos.y *= 1080;
+
       var player = makePlayer(pos);
 
       player.constraint.pointA = { x: pos.x, y: pos.y };
@@ -131,13 +134,13 @@ export default function onResults(results) {
   // Draw initial nose pos to give feedback
   if (!gameStarted) {
     for (var i = 0; i < playerCount; i++) {
-      if(!detections[i]) continue;
+      if (!detections[i]) continue;
       let pos = detections[i].landmarks[2];
 
       ctx.font = '100px serif'
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText('👃',pos.x * 1920, pos.y * 1080)
+      ctx.fillText('👃', pos.x * 1920, pos.y * 1080)
     }
   }
 
@@ -151,13 +154,14 @@ export default function onResults(results) {
   for (var i = 0; i < detections.length; i++) {
     if (!gameStarted) continue;
     let face = detections[i];
-    var pos = face.landmarks[2];
 
     //multiple all landmarks to convert to canvas size
     for (var j = 0; j < face.landmarks.length; j++) {
       face.landmarks[j].x *= 1920;
       face.landmarks[j].y *= 1080;
     }
+
+    var pos = face.landmarks[2];
 
     var closestPlayer = 0;
     var closestDistance = 100000000;
@@ -177,6 +181,7 @@ export default function onResults(results) {
     if (!gameStarted) continue;
 
     let face = PlayerDetections[i];
+    if (!face) continue;
 
     var pos = face.landmarks[2];
     players[i].constraint.pointA = { x: pos.x, y: pos.y };
@@ -230,7 +235,7 @@ export default function onResults(results) {
 
   //Draw Crosses over eyes of dead players
   for (var i = 0; i < players.length; i++) {
-    if (!players[i].alive) {
+    if (!players[i].alive && PlayerDetections[i]) {
       var left = PlayerDetections[i].landmarks[0];
       var right = PlayerDetections[i].landmarks[1];
 
