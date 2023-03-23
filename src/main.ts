@@ -12,52 +12,10 @@ import { Player } from './Types';
 
 var video = document.querySelector('video');
 
-let detector;
+let faceDetection: any;
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-//Enable webcam
-if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-  await navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      frameRate: { ideal: 60 },
-    }
-  }).then(async function (stream) {
-    //video.src = window.URL.createObjectURL(stream);
-    video.srcObject = stream;
-    video.play();
-
-    await sleep(2000);
-
-    // const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-    // const detectorConfig = {
-    //   runtime: 'mediapipe', // or 'tfjs'
-    //   // solutionPath: "../node_modules/@mediapipe/face_mesh",
-    //   solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
-    //   modelType: 'full',
-    //   maxFaces: 3,
-    //   refineLandmarks: false,
-    // }
-    // detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
-
-    const faceDetection = new window.FaceDetection({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`;
-      }
-    });
-    faceDetection.onResults(render);
-    await faceDetection.setOptions({
-      model: 'full',
-      // selfieMode: true,
-      minDetectionConfidence: 0.5,
-    });
-
-    console.log("Loaded");
-  });
 }
 
 
@@ -75,7 +33,12 @@ let countdownTimer = 4;
 let playerCount = 0;
 let players: Player[] = [];
 
-let detections: Face[];
+let detections: any[] = [];
+
+let posBufferSize = 3;
+let positionBufferIndex = 0;
+// let positionBuffer: (string | any[])[] = [];
+// let filteredPos: { x: number, y: number; }[] = []; //use this one
 
 //Start game on enter pressed 
 document.addEventListener('keydown', async function (event) {
@@ -88,7 +51,7 @@ document.addEventListener('keydown', async function (event) {
 
     for (var i = 0; i < playerCount; i++) {
 
-      var pos = detections[i].keypoints[4];
+      var pos = detections[i].landmarks[2];
 
       var player = makePlayer(pos);
 
@@ -118,33 +81,64 @@ document.addEventListener('keydown', async function (event) {
 });
 
 
-let posBufferSize = 3;
-let positionBufferIndex = 0;
-// let positionBuffer: {x : number, y: number; }[] = [];
+//seed buffer
+// for (var i = 0; i < 1; i++) {
+//   positionBuffer.push([]);
+//   for (var j = 0; j < posBufferSize; j++) {
+//     positionBuffer[i][j] = { x: 0, y: 0 };
+//   }
+// }
 
 var ctx = canvas.getContext('2d');
 
-const render = async (results) => {
-  const estimationConfig = {
-    flipHorizontal: false,
-  };
-  // detections = await detector.estimateFaces(video, estimationConfig);
+export default function onResults(results) {
+
+  detections = results.detections;
+
+  //Add position into buffer
+  // for (var i = 0; i < detections.length; i++) {
+  //   let face = detections[i];
+  //   if(!face) continue;
+  //   var pos = face.landmarks[2];
+  //   positionBuffer[i][positionBufferIndex] = pos;
+  // }
+
+  //average out positions
+  // for (var i = 0; i < positionBuffer.length; i++) {
+  //   let pos = positionBuffer[i][0];
+  //   for (var j = 1; j < positionBuffer[i].length; j++) {
+  //     pos.x += positionBuffer[i][j].x;
+  //     pos.y += positionBuffer[i][j].y;
+  //   }
+  //   pos.x /= positionBuffer[i].length;
+  //   pos.y /= positionBuffer[i].length;
+
+  //   // pos.x *= 1920;
+  //   // pos.y *= 1080;
+
+  //   filteredPos[i] = pos;
+  // }
+
+  // positionBufferIndex++;
+  // positionBufferIndex = positionBufferIndex % posBufferSize;
 
   var ctx = canvas.getContext('2d');
-  if(ctx == null || canvas == null) return;
+  if (ctx == null || canvas == null) return;
+
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // console.log(detections);
-
+  // Draw initial nose pos to give feedback
   if (!gameStarted) {
-    window.drawRectangle(
-      ctx, results.detections[0].boundingBox,
-      { color: 'blue', lineWidth: 4, fillColor: '#00000000' });
-    window.drawLandmarks(ctx, results.detections[0].landmarks, {
-      color: 'red',
-      radius: 5,
-    });
+    for (var i = 0; i < playerCount; i++) {
+      if(!detections[i]) continue;
+      let pos = detections[i].landmarks[2];
+
+      ctx.font = '100px serif'
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText('👃',pos.x * 1920, pos.y * 1080)
+    }
   }
 
   if (!gameStarted) {
@@ -157,7 +151,14 @@ const render = async (results) => {
   for (var i = 0; i < detections.length; i++) {
     if (!gameStarted) continue;
     let face = detections[i];
-    var pos = face.keypoints[4];
+    var pos = face.landmarks[2];
+
+    //multiple all landmarks to convert to canvas size
+    for (var j = 0; j < face.landmarks.length; j++) {
+      face.landmarks[j].x *= 1920;
+      face.landmarks[j].y *= 1080;
+    }
+
     var closestPlayer = 0;
     var closestDistance = 100000000;
     for (var j = 0; j < players.length; j++) {
@@ -177,7 +178,7 @@ const render = async (results) => {
 
     let face = PlayerDetections[i];
 
-    var pos = face.keypoints[4];
+    var pos = face.landmarks[2];
     players[i].constraint.pointA = { x: pos.x, y: pos.y };
     players[i].lastPosition = pos;
 
@@ -193,6 +194,7 @@ const render = async (results) => {
     }
 
     let newPos = { x: avgPos.x / len, y: avgPos.y / len };
+    // let newPos = pos;
 
     players[i].lastPosition = newPos;
     players[i].constraint.pointA = newPos;
@@ -221,7 +223,7 @@ const render = async (results) => {
       }
     }
     if (aliveCount == 1) {
-      textDisplay.innerHTML = `${players[winner].color} wins!`
+      textDisplay.innerHTML = `${players[winner].color} wins!! <br/> Refresh the page to restart`
     }
   }
 
@@ -229,13 +231,11 @@ const render = async (results) => {
   //Draw Crosses over eyes of dead players
   for (var i = 0; i < players.length; i++) {
     if (!players[i].alive) {
-      var left = PlayerDetections[i].keypoints[145];
-      var right = PlayerDetections[i].keypoints[374];
+      var left = PlayerDetections[i].landmarks[0];
+      var right = PlayerDetections[i].landmarks[1];
 
       drawX(left.x, left.y - 10);
       drawX(right.x, right.y - 10);
-
-
     }
   }
 }
@@ -316,6 +316,4 @@ function drawPath(ctx, points, closePath) {
   }
   ctx.stroke(region);
 }
-
-// setInterval(render, 1000 / 60);
 
